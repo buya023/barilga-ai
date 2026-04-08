@@ -2,7 +2,6 @@
 
 import {
   BombIcon,
-  ListIcon,
   PaletteIcon,
   PenLineIcon,
   PenSquareIcon,
@@ -23,43 +22,37 @@ export type SlashCommand = {
 export const slashCommands: SlashCommand[] = [
   {
     name: "new",
-    description: "Start a new chat",
+    description: "Шинэ чат эхлэх",
     icon: <PenSquareIcon className="size-3.5" />,
     action: "new",
   },
   {
     name: "clear",
-    description: "Clear current chat",
+    description: "Одоогийн чатыг цэвэрлэх",
     icon: <Trash2Icon className="size-3.5" />,
     action: "clear",
   },
   {
     name: "rename",
-    description: "Rename current chat",
+    description: "Чатын нэрийг өөрчлөх",
     icon: <PenLineIcon className="size-3.5" />,
     action: "rename",
   },
   {
-    name: "model",
-    description: "Change the AI model",
-    icon: <ListIcon className="size-3.5" />,
-    action: "model",
-  },
-  {
     name: "theme",
-    description: "Toggle dark/light mode",
+    description: "Харанхуй/гэрэлтэй горим солих",
     icon: <PaletteIcon className="size-3.5" />,
     action: "theme",
   },
   {
     name: "delete",
-    description: "Delete current chat",
+    description: "Чат устгах",
     icon: <XIcon className="size-3.5" />,
     action: "delete",
   },
   {
     name: "purge",
-    description: "Delete all chats",
+    description: "Бүх чатыг устгах",
     icon: <BombIcon className="size-3.5" />,
     action: "purge",
   },
@@ -100,7 +93,7 @@ export function SlashCommandMenu({
       ref={menuRef}
     >
       <div className="px-4 py-2.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
-        Commands
+        Командууд
       </div>
       <div className="max-h-64 overflow-y-auto pb-1 no-scrollbar">
         {filtered.map((cmd, index) => (

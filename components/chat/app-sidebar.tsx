@@ -61,7 +61,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
       method: "DELETE",
     });
 
-    toast.success("All chats deleted");
+    toast.success("Бүх чат устгагдлаа");
   };
 
   return (
@@ -90,7 +90,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                     </SidebarMenuButton>
                   </TooltipTrigger>
                   <TooltipContent className="hidden md:block" side="right">
-                    Open sidebar
+                    Цэс нээх
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -111,7 +111,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                       setOpenMobile(false);
                       router.push("/");
                     }}
-                    tooltip="New Chat"
+                    tooltip="Шинэ чат"
                   >
                     <PenSquareIcon className="size-4" />
                     <span className="font-medium">Шинэ чат</span>
@@ -122,7 +122,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                     <SidebarMenuButton
                       className="rounded-lg text-sidebar-foreground/40 transition-colors duration-150 hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => setShowDeleteAllDialog(true)}
-                      tooltip="Delete All Chats"
+                      tooltip="Бүгдийг устгах"
                     >
                       <TrashIcon className="size-4" />
                       <span className="text-[13px]">Бүгдийг устгах</span>

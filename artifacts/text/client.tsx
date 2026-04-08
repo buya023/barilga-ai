@@ -102,7 +102,7 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
   actions: [
     {
       icon: <ClockRewind size={18} />,
-      description: "View changes",
+      description: "Өөрчлөлт харах",
       onClick: ({ handleVersionChange }) => {
         handleVersionChange("toggle");
       },
@@ -116,7 +116,7 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
     },
     {
       icon: <UndoIcon size={18} />,
-      description: "View Previous version",
+      description: "Өмнөх хувилбар",
       onClick: ({ handleVersionChange }) => {
         handleVersionChange("prev");
       },
@@ -130,7 +130,7 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
     },
     {
       icon: <RedoIcon size={18} />,
-      description: "View Next version",
+      description: "Дараагийн хувилбар",
       onClick: ({ handleVersionChange }) => {
         handleVersionChange("next");
       },
@@ -144,17 +144,17 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
     },
     {
       icon: <CopyIcon size={18} />,
-      description: "Copy to clipboard",
+      description: "Хуулах",
       onClick: ({ content }) => {
         navigator.clipboard.writeText(content);
-        toast.success("Copied to clipboard!");
+        toast.success("Хуулагдлаа!");
       },
     },
   ],
   toolbar: [
     {
       icon: <PenIcon />,
-      description: "Add final polish",
+      description: "Эцсийн засвар",
       onClick: ({ sendMessage }) => {
         sendMessage({
           role: "user",
@@ -169,7 +169,7 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
     },
     {
       icon: <MessageIcon />,
-      description: "Request suggestions",
+      description: "Санал авах",
       onClick: ({ sendMessage }) => {
         sendMessage({
           role: "user",

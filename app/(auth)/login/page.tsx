@@ -25,11 +25,11 @@ export default function Page() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: router and updateSession are stable refs
   useEffect(() => {
     if (state.status === "failed") {
-      toast({ type: "error", description: "Invalid credentials!" });
+      toast({ type: "error", description: "Нэвтрэх мэдээлэл буруу байна!" });
     } else if (state.status === "invalid_data") {
       toast({
         type: "error",
-        description: "Failed validating your submission!",
+        description: "Мэдээлэл буруу байна!",
       });
     } else if (state.status === "success") {
       setIsSuccessful(true);

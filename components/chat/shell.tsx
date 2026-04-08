@@ -177,15 +177,15 @@ export function ChatShell() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Activate AI Gateway</AlertDialogTitle>
+            <AlertDialogTitle>AI Gateway идэвхжүүлэх</AlertDialogTitle>
             <AlertDialogDescription>
-              This application requires{" "}
-              {process.env.NODE_ENV === "production" ? "the owner" : "you"} to
-              activate Vercel AI Gateway.
+              Энэ програмыг ашиглахын тулд{" "}
+              {process.env.NODE_ENV === "production" ? "эзэмшигч" : "та"}{" "}
+              Vercel AI Gateway-г идэвхжүүлэх шаардлагатай.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Болих</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 window.open(
@@ -195,7 +195,7 @@ export function ChatShell() {
                 window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/`;
               }}
             >
-              Activate
+              Идэвхжүүлэх
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

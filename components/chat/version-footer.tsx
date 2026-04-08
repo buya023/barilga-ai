@@ -75,7 +75,7 @@ export const VersionFooter = ({
             mode === "diff" && "bg-muted text-foreground"
           )}
           onClick={() => setMode(mode === "diff" ? "edit" : "diff")}
-          title="Show changes"
+          title="Өөрчлөлтийг харах"
           type="button"
         >
           <DiffIcon className="size-4" />
@@ -125,7 +125,7 @@ export const VersionFooter = ({
           }}
           type="button"
         >
-          Restore
+          Сэргээх
           {isMutating && (
             <div className="animate-spin">
               <LoaderIcon size={14} />
@@ -140,7 +140,7 @@ export const VersionFooter = ({
           }}
           type="button"
         >
-          Latest
+          Сүүлийнх
         </button>
       </div>
     </motion.div>

@@ -163,7 +163,7 @@ function PureMultimodalInput({
         setMessages(() => []);
         break;
       case "rename":
-        toast("Rename is available from the sidebar chat menu.");
+        toast("Нэр солих үйлдлийг хажуугийн цэснээс хийнэ үү.");
         break;
       case "model": {
         const modelBtn = document.querySelector<HTMLButtonElement>(
@@ -176,30 +176,30 @@ function PureMultimodalInput({
         setTheme(resolvedTheme === "dark" ? "light" : "dark");
         break;
       case "delete":
-        toast("Delete this chat?", {
+        toast("Энэ чатыг устгах уу?", {
           action: {
-            label: "Delete",
+            label: "Устгах",
             onClick: () => {
               fetch(
                 `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/chat?id=${chatId}`,
                 { method: "DELETE" }
               );
               router.push("/");
-              toast.success("Chat deleted");
+              toast.success("Чат устгагдлаа");
             },
           },
         });
         break;
       case "purge":
-        toast("Delete all chats?", {
+        toast("Бүх чатыг устгах уу?", {
           action: {
-            label: "Delete all",
+            label: "Бүгдийг устгах",
             onClick: () => {
               fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/history`, {
                 method: "DELETE",
               });
               router.push("/");
-              toast.success("All chats deleted");
+              toast.success("Бүх чат устгагдлаа");
             },
           },
         });
@@ -282,7 +282,7 @@ function PureMultimodalInput({
       const { error } = await response.json();
       toast.error(error);
     } catch (_error) {
-      toast.error("Failed to upload file, please try again!");
+      toast.error("Файл байршуулж чадсангүй, дахин оролдоно уу!");
     }
   }, []);
 
@@ -304,7 +304,7 @@ function PureMultimodalInput({
           ...successfullyUploadedAttachments,
         ]);
       } catch (_error) {
-        toast.error("Failed to upload files");
+        toast.error("Файлууд байршуулж чадсангүй");
       } finally {
         setUploadQueue([]);
       }
@@ -350,7 +350,7 @@ function PureMultimodalInput({
           ...(successfullyUploadedAttachments as Attachment[]),
         ]);
       } catch (_error) {
-        toast.error("Failed to upload pasted image(s)");
+        toast.error("Зураг байршуулж чадсангүй");
       } finally {
         setUploadQueue([]);
       }
@@ -372,7 +372,7 @@ function PureMultimodalInput({
     <div className={cn("relative flex w-full flex-col gap-4", className)}>
       {editingMessage && onCancelEdit && (
         <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <span>Editing message</span>
+          <span>Мессеж засварлаж байна</span>
           <button
             className="rounded px-1.5 py-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
             onMouseDown={(e) => {
@@ -381,7 +381,7 @@ function PureMultimodalInput({
             }}
             type="button"
           >
-            Cancel
+            Болих
           </button>
         </div>
       )}
@@ -436,7 +436,7 @@ function PureMultimodalInput({
           if (status === "ready" || status === "error") {
             submitForm();
           } else {
-            toast.error("Please wait for the model to finish its response!");
+            toast.error("Хариултыг хүлээнэ үү!");
           }
         }}
       >
@@ -522,10 +522,6 @@ function PureMultimodalInput({
               fileInputRef={fileInputRef}
               selectedModelId={selectedModelId}
               status={status}
-            />
-            <ModelSelectorCompact
-              onModelChange={onModelChange}
-              selectedModelId={selectedModelId}
             />
           </PromptInputTools>
 

@@ -115,7 +115,7 @@ export const codeArtifact = new Artifact<"code", Metadata>({
     {
       icon: <PlayIcon size={18} />,
       label: "Run",
-      description: "Execute code",
+      description: "Код ажиллуулах",
       onClick: async ({ content, setMetadata }) => {
         const runId = generateUUID();
         const outputContent: ConsoleOutputContent[] = [];
@@ -216,7 +216,7 @@ export const codeArtifact = new Artifact<"code", Metadata>({
     },
     {
       icon: <UndoIcon size={18} />,
-      description: "View Previous version",
+      description: "Өмнөх хувилбар",
       onClick: ({ handleVersionChange }) => {
         handleVersionChange("prev");
       },
@@ -230,7 +230,7 @@ export const codeArtifact = new Artifact<"code", Metadata>({
     },
     {
       icon: <RedoIcon size={18} />,
-      description: "View Next version",
+      description: "Дараагийн хувилбар",
       onClick: ({ handleVersionChange }) => {
         handleVersionChange("next");
       },
@@ -244,17 +244,17 @@ export const codeArtifact = new Artifact<"code", Metadata>({
     },
     {
       icon: <CopyIcon size={18} />,
-      description: "Copy code to clipboard",
+      description: "Код хуулах",
       onClick: ({ content }) => {
         navigator.clipboard.writeText(content);
-        toast.success("Copied to clipboard!");
+        toast.success("Хуулагдлаа!");
       },
     },
   ],
   toolbar: [
     {
       icon: <MessageIcon />,
-      description: "Add comments",
+      description: "Тайлбар нэмэх",
       onClick: ({ sendMessage }) => {
         sendMessage({
           role: "user",
@@ -269,7 +269,7 @@ export const codeArtifact = new Artifact<"code", Metadata>({
     },
     {
       icon: <LogsIcon />,
-      description: "Add logs",
+      description: "Лог нэмэх",
       onClick: ({ sendMessage }) => {
         sendMessage({
           role: "user",

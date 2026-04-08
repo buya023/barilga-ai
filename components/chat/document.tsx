@@ -41,7 +41,7 @@ function PureDocumentToolResult({
       onClick={(event) => {
         if (isReadonly) {
           toast.error(
-            "Viewing files in shared chats is currently not supported."
+            "Хуваалцсан чатын файлыг харах боломжгүй байна."
           );
           return;
         }
@@ -107,7 +107,7 @@ function PureDocumentToolCall({
       onClick={(event) => {
         if (isReadonly) {
           toast.error(
-            "Viewing files in shared chats is currently not supported."
+            "Хуваалцсан чатын файлыг харах боломжгүй байна."
           );
           return;
         }

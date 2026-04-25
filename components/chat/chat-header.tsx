@@ -48,7 +48,15 @@ function PureChatHeader({
         />
       )}
 
-      <div className="hidden items-center gap-2 md:ml-auto md:flex">
+      <div className="hidden items-center gap-3 md:ml-auto md:flex">
+        <a
+          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          href="mailto:mbi.feedback@gmail.com?subject=MBI%20санал%20хүсэлт"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Санал хүсэлт
+        </a>
         <span className="text-xs text-muted-foreground">
           Барилгын норм, стандартын AI
         </span>

@@ -2,6 +2,7 @@
 
 import {
   HardHatIcon,
+  MailIcon,
   PanelLeftIcon,
   PenSquareIcon,
   TrashIcon,
@@ -135,6 +136,20 @@ export function AppSidebar({ user }: { user: User | undefined }) {
           <SidebarHistory user={user} />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border pt-2 pb-3">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Санал хүсэлт илгээх">
+                <a
+                  href="mailto:mbi.feedback@gmail.com?subject=MBI%20санал%20хүсэлт"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  <MailIcon className="size-4" />
+                  <span className="text-[13px]">Санал хүсэлт илгээх</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
           {user && <SidebarUserNav user={user} />}
         </SidebarFooter>
         <SidebarRail />

@@ -7,26 +7,60 @@ import postgres from 'postgres';
 
 export const maxDuration = 60;
 
-// NVIDIA API (OpenAI-compatible) for embeddings + LLM
+// NVIDIA (OpenAI-compatible) for chat. Embeddings use direct fetch in embedText.
 const nvidia = new OpenAI({
   baseURL: 'https://integrate.api.nvidia.com/v1',
   apiKey: process.env.NVIDIA_API_KEY || '',
 });
 
-// Direct connection to NeonDB for vector search (separate from Drizzle)
-const ragDb = postgres(process.env.POSTGRES_URL ?? '', { ssl: 'require' });
+// Direct connection to NeonDB for vector search (separate from Drizzle).
+// max:1 prevents Neon connection exhaustion under concurrent serverless invocations.
+const ragDb = postgres(process.env.POSTGRES_URL ?? '', {
+  ssl: 'require',
+  max: 1,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
+
+// Per-instance embedding cache. Suggested questions and repeats skip the NVIDIA call.
+const embedCache = new Map<string, number[]>();
+const EMBED_CACHE_MAX = 500;
 
 // ─── RAG Helper Functions ───
 
 async function embedText(text: string): Promise<number[]> {
-  const resp = await nvidia.embeddings.create({
-    input: [text],
-    model: 'nvidia/nv-embedqa-e5-v5',
-    encoding_format: 'float',
-    // @ts-ignore - NVIDIA-specific parameter
-    extra_body: { input_type: 'query', truncate: 'NONE' },
+  const cached = embedCache.get(text);
+  if (cached) return cached;
+
+  // Direct fetch: the OpenAI JS SDK sends `extra_body` literally, which NVIDIA rejects.
+  // input_type/truncate must be top-level fields.
+  const resp = await fetch('https://integrate.api.nvidia.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.NVIDIA_API_KEY ?? ''}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: [text],
+      model: 'nvidia/nv-embedqa-e5-v5',
+      encoding_format: 'float',
+      input_type: 'query',
+      truncate: 'NONE',
+    }),
+    signal: AbortSignal.timeout(10000),
   });
-  return resp.data[0].embedding;
+  if (!resp.ok) {
+    throw new Error(`embed ${resp.status}: ${await resp.text()}`);
+  }
+  const data = (await resp.json()) as { data: { embedding: number[] }[] };
+  const embedding = data.data[0].embedding;
+
+  if (embedCache.size >= EMBED_CACHE_MAX) {
+    const firstKey = embedCache.keys().next().value;
+    if (firstKey !== undefined) embedCache.delete(firstKey);
+  }
+  embedCache.set(text, embedding);
+  return embedding;
 }
 
 function distanceToRelevance(distance: number): number {
@@ -143,35 +177,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid message payload' }, { status: 400 });
     }
 
-    // Ensure chat exists
-    const chatExists = await getChatById({ id });
+    // ─── RAG: ensure chat row + retrieve chunks in parallel ───
+    const t0 = Date.now();
+    const [chatExists, retrieval] = await Promise.all([
+      getChatById({ id }),
+      retrieveChunks(userQuery, 10, 20),
+    ]);
     if (!chatExists) {
       await saveChat({ id, userId: session.user.id, title: userQuery.substring(0, 100), visibility: 'private' });
     }
+    const { top: topRows, all: allRows } = retrieval;
+    console.log(`[t] retrieve+chat: ${Date.now() - t0}ms`);
 
-    // ─── RAG: Retrieve, Build Context, Call LLM ───
-
-    const { top: topRows, all: allRows } = await retrieveChunks(userQuery, 5, 15);
-
-    let answer = '';
-    let sources: any[] = [];
+    // ─── Build prompt + source metadata ───
+    const sources: any[] = [];
     let related: any[] = [];
+    let prompt: string;
 
     if (!topRows.length) {
-      // No chunks found — answer from general knowledge
-      const completion = await nvidia.chat.completions.create({
-        model: 'moonshotai/kimi-k2.5',
-        messages: [{ role: 'user', content: `Та бол Монгол Улсын барилгын норм, стандартын мэргэжилтэн. Хэрэглэгчийн асуултад Монгол хэлээр дэлгэрэнгүй хариулна уу.\n\nАсуулт: ${userQuery}` }],
-        temperature: 0.3,
-        max_tokens: 16384,
-      });
-      answer = completion.choices[0].message.content || '';
+      prompt = `Та бол Монгол Улсын барилгын норм, стандартын мэргэжилтэн. Хэрэглэгчийн асуултад Монгол хэлээр дэлгэрэнгүй хариулна уу.\n\nАсуулт: ${userQuery}`;
     } else {
-      // Deduplicate and build context
-      const deduped = deduplicateSources(topRows);
+      const deduped = deduplicateSources(topRows, 8);
       const topSourceNames = new Set(deduped.map(d => d.metadata?.source));
-
-      // Build source reference map and context
       const contextBlocks: string[] = [];
       const sourceRefs: string[] = [];
 
@@ -188,11 +215,6 @@ export async function POST(req: Request) {
         sourceRefs.push(`[${i + 1}] = ${loc}`);
         contextBlocks.push(`[${i + 1}]\n${text}`);
 
-        const location = [
-          page ? `хуудас ${page}` : '',
-          section ? `§${section}` : '',
-        ].filter(Boolean).join(', ');
-
         sources.push({
           title: name,
           section,
@@ -206,103 +228,42 @@ export async function POST(req: Request) {
 
       related = buildRelatedDocs(allRows, topSourceNames);
 
-      const refsText = sourceRefs.join('\n');
-      const context = contextBlocks.join('\n\n---\n\n');
-
-      const prompt = `Та бол "Барилгын Нэгдсэн Мэдээллийн Тов" (MBI) - Монгол Улсын барилгын норм, стандартын AI туслах юм.
+      prompt = `Та бол "Барилгын Нэгдсэн Мэдээллийн Тов" (MBI) - Монгол Улсын барилгын норм, стандартын AI туслах юм.
 
 ЧУХАЛ ДҮРЭМ:
-1. Доорх эх сурвалжууд дээр ҮР ДҮНТЭЙ үндэслэн ЗААВАЛ хариулна уу. "Олдсонгүй", "тайлбар байхгүй" гэж ХЭЗЭЭ Ч БҮҮҮ хэлээрэй.
-2. Эх сурвалжуудад шууд хариулт байхгүй ч гэсэн тэдгээрт байгаа мэдээллийг нэгтгэн, дүгнэн, тайлбарлан хариулна уу.
-3. Хариулт дотроо эх сурвалжийг [1], [2], [3] гэх мэтээр заавал дурдана уу. Жишээ: "Барилгын геодезийн ажлыг ... тодорхойлсон байдаг [1]."
-4. Зөвхөн Монгол хэлээр хариулна уу.
-5. Хариултаа тодорхой, бүтэцтэй байдлаар бичнэ үү.
-6. Хариултын ТӨГСГӨЛД эх сурвалжуудыг БҮҮҮ ЖАГСААЖ бичээрэй. Зөвхөн [1], [2] гэх мэт тэмдэглэгээг хариулт дотор ашиглана уу.
+1. Хариулт ЗААВАЛ хэрэгтэй мэдээллийг өөртөө шууд агуулсан байх ёстой. "Эх сурвалж [1]-ээс үзнэ үү", "дэлгэрэнгүй [2]-т байна" гэх мэтээр зөвхөн заагаад болохгүй — мэдээллийг өөрөө бичиж өг.
+2. Жагсаалтын асуултанд (жишээ нь: "юу юу", "ямар ямар", "жагсаалт", "төрлүүд") ЗААВАЛ цэгтэй жагсаалт (markdown bullet list) хэлбэрээр бүх зүйлийг тоочиж бич. Жишээ:
+   - **Зүйл 1**: тайлбар [1]
+   - **Зүйл 2**: тайлбар [2]
+   - **Зүйл 3**: тайлбар [3]
+3. Эх сурвалжуудад шууд хариулт байхгүй ч гэсэн тэдгээрт байгаа мэдээллийг нэгтгэн, дүгнэн, тайлбарлан хариулна уу. "Олдсонгүй", "тайлбар байхгүй" гэж ХЭЗЭЭ Ч БҮҮ хэлээрэй.
+4. Эх сурвалжийг [1], [2], [3] гэх мэт тэмдэглэгээгээр заавал дурдана уу.
+5. Зөвхөн Монгол хэлээр хариулна уу.
+6. Хариултын ТӨГСГӨЛД эх сурвалжуудын жагсаалтыг БҮҮ давтан бичээрэй (систем автоматаар нэмнэ).
 
 ЭХ СУРВАЛЖУУДЫН ЛАВЛАХ:
-${refsText}
+${sourceRefs.join('\n')}
 
 ЭХ СУРВАЛЖУУД:
-${context}
+${contextBlocks.join('\n\n---\n\n')}
 
 АСУУЛТ: ${userQuery}
 `;
-
-      const completion = await nvidia.chat.completions.create({
-        model: 'moonshotai/kimi-k2.5',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        top_p: 0.9,
-        max_tokens: 16384,
-      });
-      answer = completion.choices[0].message.content || '';
     }
-
-    // ─── Save messages to DB ───
 
     const userMessageId = message?.id || generateUUID();
     const assistantMessageId = generateUUID();
+    const textPartId = generateUUID();
+    const encoder = new TextEncoder();
 
+    // Save user message immediately so we don't lose it on LLM failure.
     await saveMessages({
       messages: [
         { id: userMessageId, chatId: id, role: 'user', parts: [{ type: 'text', text: userQuery }], attachments: [], createdAt: new Date() },
-        { id: assistantMessageId, chatId: id, role: 'assistant', parts: [{ type: 'text', text: answer }], attachments: [], createdAt: new Date() },
       ]
     });
 
-    // ─── Build markdown content with inline source links ───
-
-    let fullContent = answer;
-
-    // Build source map for [n] replacement
-    const sourceMap: Record<string, { label: string; link: string }> = {};
-    for (let i = 0; i < sources.length; i++) {
-      const s = sources[i];
-      const location = [s.page ? `хуудас ${s.page}` : '', s.section ? `§${s.section}` : ''].filter(Boolean).join(', ');
-      const label = s.title + (location ? ` (${location})` : '');
-      sourceMap[`[${i + 1}]`] = { label, link: s.link || '' };
-    }
-
-    // Replace [1], [2] with clickable links
-    for (const [ref, info] of Object.entries(sourceMap)) {
-      const escaped = ref.replace('[', '\\[').replace(']', '\\]');
-      const replacement = info.link ? `[${ref}](${info.link})` : ref;
-      fullContent = fullContent.replace(new RegExp(escaped, 'g'), replacement);
-    }
-
-    // Append source reference list
-    if (sources.length > 0) {
-      fullContent += '\n\n---\n\n**Эх сурвалжууд:**\n\n';
-      for (let i = 0; i < sources.length; i++) {
-        const s = sources[i];
-        const location = [s.page ? `хуудас ${s.page}` : '', s.section ? `§${s.section}` : ''].filter(Boolean).join(', ');
-        const label = s.title + (location ? ` — ${location}` : '');
-        if (s.link) {
-          fullContent += `**[${i + 1}]** [${label}](${s.link}) — ${s.relevance}%\n\n`;
-        } else {
-          fullContent += `**[${i + 1}]** ${label} — ${s.relevance}%\n\n`;
-        }
-      }
-    }
-
-    // Related docs
-    if (related.length > 0) {
-      fullContent += '**Хамааралтай баримт бичгүүд:**\n\n';
-      for (const r of related) {
-        if (r.link) {
-          fullContent += `[${r.title}](${r.link}) — ${r.relevance}%\n\n`;
-        } else {
-          fullContent += `${r.title} — ${r.relevance}%\n\n`;
-        }
-      }
-    }
-
-    // ─── Stream response (AI SDK v6 UI Message Stream) ───
-
-    const textPartId = generateUUID();
-    const encoder = new TextEncoder();
-    const words = fullContent.match(/\S+|\s+/g) || [fullContent];
-
+    // ─── Stream LLM response directly into SSE (AI SDK v6 UI Message Stream) ───
     const stream = new ReadableStream({
       async start(controller) {
         const send = (obj: object) => {
@@ -313,9 +274,100 @@ ${context}
         send({ type: 'start-step' });
         send({ type: 'text-start', id: textPartId });
 
-        for (const word of words) {
-          send({ type: 'text-delta', id: textPartId, delta: word });
-          await new Promise((r) => setTimeout(r, 15));
+        let answer = '';
+        const tLlm = Date.now();
+        try {
+          const completion = await nvidia.chat.completions.create({
+            model: 'meta/llama-3.3-70b-instruct',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3,
+            top_p: 0.9,
+            max_tokens: 1024,
+            stream: true,
+          }, { signal: AbortSignal.timeout(60000) });
+
+          // Stop streaming when the model starts writing its own source list
+          // (the system appends a canonical one after). Lookahead buffer of 80 chars
+          // catches patterns split across deltas.
+          // Catches "Эх сурвалж:", "ЭХ СУРВАЛЖУУД:", "**Эх сурвалжууд:**", "Sources:" etc.
+          // \p{L}* matches Mongolian plural suffixes like "ууд". `u` flag enables proper Cyrillic case folding.
+          const STOP_PATTERN = /\n\s*[*#]{0,3}\s*(?:Эх\s+сурвалж|Сурвалж|Source)\p{L}*\s*:/iu;
+          const LOOKAHEAD = 80;
+          let pendingBuffer = '';
+          let stopped = false;
+          let firstToken = true;
+
+          for await (const chunk of completion as any) {
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (!delta) continue;
+            if (firstToken) {
+              console.log(`[t] llm first token: ${Date.now() - tLlm}ms`);
+              firstToken = false;
+            }
+            if (stopped) continue; // drain remaining LLM stream silently
+
+            pendingBuffer += delta;
+
+            const combined = answer + pendingBuffer;
+            const match = combined.match(STOP_PATTERN);
+            if (match && match.index !== undefined) {
+              const cleanLength = match.index;
+              const additional = combined.substring(answer.length, cleanLength);
+              if (additional.length > 0) {
+                answer += additional;
+                send({ type: 'text-delta', id: textPartId, delta: additional });
+              }
+              pendingBuffer = '';
+              stopped = true;
+              continue;
+            }
+
+            // Flush everything except the lookahead window
+            if (pendingBuffer.length > LOOKAHEAD) {
+              const flushAmount = pendingBuffer.length - LOOKAHEAD;
+              const toFlush = pendingBuffer.substring(0, flushAmount);
+              answer += toFlush;
+              send({ type: 'text-delta', id: textPartId, delta: toFlush });
+              pendingBuffer = pendingBuffer.substring(flushAmount);
+            }
+          }
+
+          // Flush any remaining buffered text (only if model never tried its own source list)
+          if (!stopped && pendingBuffer.length > 0) {
+            answer += pendingBuffer;
+            send({ type: 'text-delta', id: textPartId, delta: pendingBuffer });
+          }
+          console.log(`[t] llm total: ${Date.now() - tLlm}ms`);
+        } catch (e) {
+          console.error('LLM stream error:', e);
+          const fallback = answer
+            ? '\n\n[Хариулт тасарлаа. Дахин оролдоно уу.]'
+            : 'Уучлаарай, систем одоогоор ачаалал ихтэй байна. Хэдэн хормын дараа дахин оролдоно уу.';
+          answer += fallback;
+          send({ type: 'text-delta', id: textPartId, delta: fallback });
+        }
+
+        // Append sources + related docs as additional deltas (not in LLM stream).
+        if (sources.length > 0) {
+          let extra = '\n\n---\n\n**Эх сурвалжууд:**\n\n';
+          for (let i = 0; i < sources.length; i++) {
+            const s = sources[i];
+            const location = [s.page ? `хуудас ${s.page}` : '', s.section ? `§${s.section}` : ''].filter(Boolean).join(', ');
+            const label = s.title + (location ? ` — ${location}` : '');
+            extra += s.link
+              ? `**[${i + 1}]** [${label}](${s.link}) — ${s.relevance}%\n\n`
+              : `**[${i + 1}]** ${label} — ${s.relevance}%\n\n`;
+          }
+          if (related.length > 0) {
+            extra += '**Хамааралтай баримт бичгүүд:**\n\n';
+            for (const r of related) {
+              extra += r.link
+                ? `[${r.title}](${r.link}) — ${r.relevance}%\n\n`
+                : `${r.title} — ${r.relevance}%\n\n`;
+            }
+          }
+          answer += extra;
+          send({ type: 'text-delta', id: textPartId, delta: extra });
         }
 
         send({ type: 'text-end', id: textPartId });
@@ -323,6 +375,13 @@ ${context}
         send({ type: 'finish', finishReason: 'stop' });
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
+
+        // Persist assistant message after the stream closes (don't block the user).
+        saveMessages({
+          messages: [
+            { id: assistantMessageId, chatId: id, role: 'assistant', parts: [{ type: 'text', text: answer }], attachments: [], createdAt: new Date() },
+          ]
+        }).catch((e) => console.error('Failed to save assistant message:', e));
       }
     });
 
